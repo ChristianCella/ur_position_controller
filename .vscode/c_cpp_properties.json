@@ -1,0 +1,45 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/christian/projects/merlin_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/christian/projects/merlin_ws/src/eigen_utils/eigen_matrix_utils/include/**",
+        "/home/christian/projects/merlin_ws/src/ssm_safety/fixed_areas_ssm/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/frequency_identification/include/**",
+        "/home/christian/projects/merlin_ws/src/robotiq_ros_driver/robotiq_gazebo/gazebo_grasp_plugin/include/**",
+        "/home/christian/projects/merlin_ws/src/robotiq_ros_driver/robotiq_gazebo/gazebo_version_helpers/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/kinematics_filters/include/**",
+        "/home/christian/projects/merlin_ws/src/name_sorting/include/**",
+        "/home/christian/projects/merlin_ws/src/object_loader/object_loader/include/**",
+        "/home/christian/projects/merlin_ws/src/rosdyn/rosdyn_core/include/**",
+        "/home/christian/projects/merlin_ws/src/rosparam_utilities/include/**",
+        "/home/christian/projects/merlin_ws/src/Universal_Robots_ROS_scaled_controllers/scaled_joint_trajectory_controller/include/**",
+        "/home/christian/projects/merlin_ws/src/Universal_Robots_ROS_scaled_controllers/speed_scaling_interface/include/**",
+        "/home/christian/projects/merlin_ws/src/Universal_Robots_ROS_scaled_controllers/speed_scaling_state_controller/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/state_space_controllers/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/state_space_filters/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/state_space_ros/include/**",
+        "/home/christian/projects/merlin_ws/src/cnr_control_toolbox/state_space_systems/include/**",
+        "/home/christian/projects/merlin_ws/src/subscription_notifier/include/**",
+        "/home/christian/projects/merlin_ws/src/Universal_Robots_ROS_Driver/ur_calibration/include/**",
+        "/home/christian/projects/merlin_ws/src/universal_robot/ur_kinematics/include/**",
+        "/home/christian/projects/merlin_ws/src/ur5e_mics/ur_merlin_utils/ur_merlin_ros_utils/include/**",
+        "/home/christian/projects/merlin_ws/src/Universal_Robots_ROS_Driver/ur_robot_driver/include/**",
+        "/home/christian/projects/merlin_ws/src/ssm_safety/velocity_scaling_iso15066/include/**",
+        "/home/christian/projects/merlin_ws/src/aruco_tracking_and_calibration/vision_utils/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}
