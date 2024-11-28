@@ -255,7 +255,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
 
   // Subscriber
   this->desired_pose_sub = nh.subscribe("desired_pose", 1, &Controller::DesiredPoseCallback, this);
-  this->joint_states_sub = nh.subscribe("ur_joint_states", 1, &Controller::JointStateCallback, this);
+  this->joint_states_sub = nh.subscribe("joint_states", 1, &Controller::JointStateCallback, this);
 
   // Getting first msg for desired pose
   boost::shared_ptr<geometry_msgs::PoseStamped const> sharedPtrDesiredPose = NULL;
