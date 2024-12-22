@@ -1,32 +1,32 @@
 #!/usr/bin/env python
 import rospy
 from geometry_msgs.msg import PoseStamped
-
-""" 
-        x: 0.0
-        y: 0.0996
-        z: -2.042830148012698e-11
-      rotation: 
-        x: -0.7071067799551687
-        y: -4.294163923668199e-05
-        z: -4.29416392279611e-05
-        w: 0.7071067798101386
-
-"""
+import numpy as np
+from math import pi
+from scipy.spatial.transform import Rotation as R
 
 # Replace this with code to get the pose from your device
 def get_teleoperation_pose():
+
+    Rot = np.array([
+        [1, 0, 0],
+        [0, np.cos(pi), -np.sin(pi)],
+        [0, np.sin(pi), np.cos(pi)]
+        ])
+    
+    qx, qy, qz, qw = (R.from_dcm(Rot)).as_quat()
+
     # Example pose, replace with your teleoperation device's logic
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
-    pose.header.frame_id = "base"  # Change to the appropriate frame
+    pose.header.frame_id = "base_link"  # Change to the appropriate frame
     pose.pose.position.x = 0.30
     pose.pose.position.y = 0.40
     pose.pose.position.z = 0.40
-    pose.pose.orientation.x = 0.998
-    pose.pose.orientation.y = 0.001
-    pose.pose.orientation.z = -0.022
-    pose.pose.orientation.w = 0.065
+    pose.pose.orientation.x = qx
+    pose.pose.orientation.y = qy
+    pose.pose.orientation.z = qz
+    pose.pose.orientation.w = qw
     return pose
 
 def teleoperation_publisher():

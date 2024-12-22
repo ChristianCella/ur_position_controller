@@ -345,9 +345,9 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   // Getting the controller gains from param file
   this->Kp = Eigen::Vector3d(2.5, 2.5, 2.5);  // TODO: Parametrise
   this->Ko = Eigen::Vector3d(2.5, 2.5, 2.5);  // TODO: Parametrise
-  this->tf_reference_name = "tabletop";  // TODO: Parametrise -> Set it accordingly to the frame_id of the message
+  this->tf_reference_name = "base_link";  // TODO: Parametrise -> Set it accordingly to the frame_id of the message
                                          // coming from topic /desired_pose?
-  this->tf_tcp_name = "flange";          // TODO: Parametrise
+  this->tf_tcp_name = "tool0";          // TODO: Parametrise
 
   // Setting time
   this->prev_time = std::chrono::high_resolution_clock::now();
