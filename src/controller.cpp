@@ -113,6 +113,7 @@ void Controller::DesiredPoseCallback(const geometry_msgs::PoseStamped& msg)
   return;
 }
 
+/*
 void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
 {
   std::vector<std::string> joint_names = { "elbow_joint", "shoulder_pan_joint", "shoulder_lift_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint" };
@@ -144,9 +145,9 @@ void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
   //}
   
 }
+*/
 
 
-/*
 void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
 {
   std::vector<std::string> joint_names = { "elbow_joint", "shoulder_pan_joint", "shoulder_lift_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // TODO: parametrise or put inside kinematics
@@ -172,18 +173,30 @@ void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
   // wrist_2_joint
   // wrist_3_joint
 
-  this->joint_position[0] = msg.position[2];
-  this->joint_position[1] = msg.position[1];
+  /*
+  - elbow_joint
+  - hande_left_finger_joint
+  - hande_right_finger_joint
+  - shoulder_lift_joint
+  - shoulder_pan_joint
+  - wrist_1_joint
+  - wrist_2_joint
+  - wrist_3_joint
+
+  */
+
+  this->joint_position[0] = msg.position[4];
+  this->joint_position[1] = msg.position[3];
   this->joint_position[2] = msg.position[0];
 
-  this->joint_position[3] = msg.position[3];
-  this->joint_position[4] = msg.position[4];
-  this->joint_position[5] = msg.position[5];
+  this->joint_position[3] = msg.position[5];
+  this->joint_position[4] = msg.position[6];
+  this->joint_position[5] = msg.position[7];
 
   return;
 }
 
-*/
+
 
 void Controller::ComputeControlAction()
 {
@@ -208,7 +221,6 @@ void Controller::ComputeControlAction()
   if (this->buffered_position.empty() || this->buffered_orientation.empty())
     return;
 
-  ROS_INFO("Mega checkpoint 1");
   Eigen::Vector3d setpoint_position = this->buffered_position.front();
   Eigen::Matrix3d setpoint_orientation = this->buffered_orientation.front();
   this->buffered_position.pop_front();
@@ -219,10 +231,8 @@ void Controller::ComputeControlAction()
   temp.position.x = setpoint_position.x();
   temp.position.y = setpoint_position.y();
   temp.position.z = setpoint_position.z();
-  ROS_INFO("Publishing desired_pose_interpolated:");
   ROS_INFO("Setpoint Position - x: %f, y: %f, z: %f", temp.position.x, temp.position.y, temp.position.z);
   this->desired_pose_interpolated_pub.publish(temp);
-  ROS_INFO("Desired pose interpolated published successfully.");
 
   // ---------------------------------------
   // Computing error
@@ -278,10 +288,9 @@ void Controller::ComputeControlAction()
   // ---------------- Debug topics ---------------- //
 
 
-  // Uncomment to die
+  // Publish the values of the joint velocities
   ROS_INFO("Publishing joint velocities to topic: %s", joint_velocity_pub.getTopic().c_str());
   joint_velocity_pub.publish(q_dot);
-  ROS_INFO("Joint velocities published.");
 }
 
 // ----------------------------------------------------------------- //
@@ -330,14 +339,12 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
     ROS_INFO("No joint_states messages received");
   }
   this->JointStateCallback(*sharedPtrJointStates);
-  ROS_INFO("Checkpoint 1");
   // Creating the TF listener
   // this->pTfListener = new tf2_ros::TransformListener(this->tfBuffer);
 
   // Getting the controller gains from param file
-  this->Kp = Eigen::Vector3d(2.0, 2.0, 2.0);  // TODO: Parametrise
-  this->Ko = Eigen::Vector3d(2.0, 2.0, 2.0);  // TODO: Parametrise
-  ROS_INFO("Checkpoint 2");
+  this->Kp = Eigen::Vector3d(2.5, 2.5, 2.5);  // TODO: Parametrise
+  this->Ko = Eigen::Vector3d(2.5, 2.5, 2.5);  // TODO: Parametrise
   this->tf_reference_name = "tabletop";  // TODO: Parametrise -> Set it accordingly to the frame_id of the message
                                          // coming from topic /desired_pose?
   this->tf_tcp_name = "flange";          // TODO: Parametrise
@@ -345,15 +352,12 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   // Setting time
   this->prev_time = std::chrono::high_resolution_clock::now();
   // this->prev_time = ros::Time::now();
-  ROS_INFO("Checkpoint 3");
   this->buffered_position = std::list<Eigen::Vector3d>();
   this->buffered_orientation = std::list<Eigen::Matrix3d>();
-  ROS_INFO("Checkpoint 4");
   // --- TRY --- //
   std::string robot_description;
   this->nh.param("robot_description", robot_description, std::string());
   this->p_robot_kinematics = std::make_shared<Kinematics>(robot_description);
   this->p_robot_kinematics->setChain(this->tf_reference_name, this->tf_tcp_name);
   // --- TRY --- //
-  ROS_INFO("Checkpoint 5");
 }

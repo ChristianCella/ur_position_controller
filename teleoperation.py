@@ -19,20 +19,20 @@ def get_teleoperation_pose():
     # Example pose, replace with your teleoperation device's logic
     pose = PoseStamped()
     pose.header.stamp = rospy.Time.now()
-    pose.header.frame_id = "base_link"  # Change to the appropriate frame
+    pose.header.frame_id = "base"  # Change to the appropriate frame
     pose.pose.position.x = 0.30
     pose.pose.position.y = 0.40
     pose.pose.position.z = 0.40
-    pose.pose.orientation.x = -0.7071067799551687
-    pose.pose.orientation.y = -4.294163923668199e-05
-    pose.pose.orientation.z = -4.29416392279611e-05
-    pose.pose.orientation.w = 0.7071067798101386
+    pose.pose.orientation.x = 0.998
+    pose.pose.orientation.y = 0.001
+    pose.pose.orientation.z = -0.022
+    pose.pose.orientation.w = 0.065
     return pose
 
 def teleoperation_publisher():
     rospy.init_node('teleoperation_publisher', anonymous=True)
     pub = rospy.Publisher('/desired_pose', PoseStamped, queue_size=10)
-    rate = rospy.Rate(500)  # Publish at 500 Hz
+    rate = rospy.Rate(50)  # Publish at 500 Hz
 
     while not rospy.is_shutdown():
         pose = get_teleoperation_pose()  # Get the desired pose from your device
