@@ -5,6 +5,7 @@ import numpy as np
 from math import pi
 from scipy.spatial.transform import Rotation as R
 import tf
+from std_srvs.srv import Trigger
 
 class RobotPose:
 
@@ -108,6 +109,9 @@ class PosePublisher:
         self.tcp_pose = tcp_pose
         self.error = error
         self.verbose = True
+
+        self.cl_openGripper = rospy.ServiceProxy('open_gripper', Trigger)
+        self.cl_closeGripper = rospy.ServiceProxy('close_gripper', Trigger)
         
         # Initialize the node 
         rospy.init_node(self.node_name, anonymous=True)
@@ -133,6 +137,8 @@ class PosePublisher:
             else:
                 self.current_pose = self.tcp_pose[i]
             self.pub.publish(self.current_pose)
+            self.cl_closeGripper()
+            rospy.sleep(0.25)
 
             if self.verbose: rospy.loginfo(f"Publishing desired pose {i+1}")
             self.verbose = False
@@ -155,6 +161,8 @@ class PosePublisher:
                 rospy.loginfo(f"Reached desired pose {i+1}")
                 i += 1
                 self.verbose = True
+                self.cl_openGripper()
+                rospy.sleep(0.25)
 
             self.rate.sleep()
 
