@@ -33,7 +33,7 @@ The repository at the following [link](https://github.com/pucciland95/quest2ros)
 
 ### **Usage** <a name="usage"></a> ▶️
 
-As of now, only some tests can be performed. In particular, you can test the position controller defined in [controller.cpp](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp) by publishing on the topic ```/desired_pose``` a set of different cartesian poses specified in [test.py](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/test.py). To test this repo, open four different terminals: 
+As of now, only some tests can be performed. In particular, you can test the position controller defined in [controller.cpp](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp) by publishing on the topic ```/desired_pose``` a set of different cartesian poses specified in [test_static_poses.py](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/test_static_poses.py). To test this repo, open four different terminals: 
 
 1. **Terminal for the build:**
     ```
