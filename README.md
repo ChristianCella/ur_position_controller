@@ -38,6 +38,7 @@ As of now, only some tests can be performed. In particular, you can test the pos
 1. **Terminal for the build:**
     ```
     source (your_path_to_ws)/devel/setup.bash
+    cd (your_path_to_ws)
     catkin build -cs
     ```
     The command '-cs' skips all the packages that cannot be built.
