@@ -25,7 +25,7 @@ The repository at the following [link](https://github.com/pucciland95/quest2ros)
 
     At the moment, the repo is still developed on this branch:
     ```
-    cd ../merlin_ws/src (navigate to your directory)
+    cd (your_path_to_ws)/src 
     git clone -b dev_chris git@github.com:ChristianCella/ur_position_controller.git
     ```
 
@@ -33,6 +33,29 @@ The repository at the following [link](https://github.com/pucciland95/quest2ros)
 
 ### **Usage** <a name="usage"></a> ▶️
 
-As of now, only some tests can be performed. In particular, you can test the position controller defined in [controller.cpp](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp) by publishing on the topic ```/desired_pose``` a set of different cartesian poses specified in [test.py]()
+As of now, only some tests can be performed. In particular, you can test the position controller defined in [controller.cpp](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp) by publishing on the topic ```/desired_pose``` a set of different cartesian poses specified in [test.py](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/test.py). To test this repo, open four different terminals: 
 
-Open 4 terminals and 
+1. **Terminal for the build:**
+    ```
+    source (your_path_to_ws)/devel/setup.bash
+    catkin build -cs
+    ```
+    The command '-cs' skips all the packages that cannot be built.
+
+2. **Terminal to bring-up the robot:**
+    ```
+    source (your_path_to_ws)/devel/setup.bash
+    roslaunch ur5e_mics_bringup raw_control.launch
+    ```
+
+3. **Terminal to publish the desired pose:**
+    ```
+    source (your_path_to_ws)/devel/setup.bash
+    rosrun ur_position_controller test.py
+    ```
+
+4. **Terminal to control the robot:**
+    ```
+    source (your_path_to_ws)/devel/setup.bash
+    rosrun ur_position_controller position_controller
+    ```
