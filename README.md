@@ -1,11 +1,5 @@
-# Teleoperation 🕹️
-This repo allows to control the ur5e robot with teleoperation.  The work was strated by [Niccolò Lucci](https://github.com/pucciland95) and it relies on Oculus Quest 2 from Meta (Look at the following [lnk](https://www.digitalmosaik.com/it/blog/oculus-quest-2/) for more details on the device).
-
----
-
-### **quest2ros** <a name="quest2ros"></a> 👓
-
-The repository at the following [link](https://github.com/pucciland95/quest2ros) still needs to be cloned in the src folder of the complete project (the 'src' folder mentioned here is the one that is created during the procedure detailed [here](https://github.com/MerlinLaboratory/ur5e_mics) and described more in detail in [Installation procedure](#install)).
+# Position controller 🕹️
+This package contains a position controller for the robot ur5e from Universal Robots. The work was strated by [Niccolò Lucci](https://github.com/pucciland95) and is one of the key packages in case you want to perform teleoperation with the robot. In that case, refer to [this](https://github.com/ChristianCella/quest2ros/tree/main) repository.
 
 ---
 
@@ -19,16 +13,19 @@ The repository at the following [link](https://github.com/pucciland95/quest2ros)
         ├── aruco_tracking_and_calibration/      # package for the calibration
         ├── cnr_control_toolbox/                 # package with cnr controllers
         ├── ur_msgs/                             # package with the definition of messages
+        ...
         └── ur5e_mics/                           # package for the ur5e robot
     ```
+
+    At the moment, the tests have been performed by working inside the branch ```dev_christian``` of the package ```ur5e_mics```.
 2. **Clone this repository:**
 
-    At the moment, the repo is still developed on this branch:
+    Also for what concerns the position controller, the repo is still developed on this branch:
     ```
     cd (your_path_to_ws)/src 
     git clone -b dev_chris git@github.com:ChristianCella/ur_position_controller.git
     ```
-
+    
 ---
 
 ### **Usage** <a name="usage"></a> ▶️
@@ -52,7 +49,7 @@ As of now, only some tests can be performed. In particular, you can test the pos
 3. **Terminal to publish the desired pose:**
     ```
     source (your_path_to_ws)/devel/setup.bash
-    rosrun ur_position_controller test.py
+    rosrun ur_position_controller test_static_poses.py
     ```
 
 4. **Terminal to control the robot:**
