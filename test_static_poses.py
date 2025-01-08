@@ -55,7 +55,7 @@ class RobotPose:
         Convert a rotation matrix to a quaternion
         - Rot: 3x3 rotation matrix (specified as a NumPy array)
         '''
-        quat = (R.from_dcm(Rot)).as_quat()
+        quat = (R.from_matrix(Rot)).as_quat()
         return quat
 
     def compute_pose(self) -> PoseStamped:
@@ -110,8 +110,8 @@ class PosePublisher:
         self.error = error
         self.verbose = True
 
-        self.cl_openGripper = rospy.ServiceProxy('open_gripper', Trigger)
-        self.cl_closeGripper = rospy.ServiceProxy('close_gripper', Trigger)
+        #self.cl_openGripper = rospy.ServiceProxy('open_gripper', Trigger)
+        #self.cl_closeGripper = rospy.ServiceProxy('close_gripper', Trigger)
         
         # Initialize the node 
         rospy.init_node(self.node_name, anonymous=True)
@@ -137,8 +137,9 @@ class PosePublisher:
             else:
                 self.current_pose = self.tcp_pose[i]
             self.pub.publish(self.current_pose)
-            self.cl_closeGripper()
-            rospy.sleep(0.25)
+            #self.cl_closeGripper()
+            #rospy.sleep(0.25)
+            #rospy.loginfo(f"Closed gripper")
 
             if self.verbose: rospy.loginfo(f"Publishing desired pose {i+1}")
             self.verbose = False
@@ -161,8 +162,9 @@ class PosePublisher:
                 rospy.loginfo(f"Reached desired pose {i+1}")
                 i += 1
                 self.verbose = True
-                self.cl_openGripper()
-                rospy.sleep(0.25)
+                #self.cl_openGripper()
+                #rospy.sleep(0.25)
+                #rospy.loginfo(f"Opened gripper")
 
             self.rate.sleep()
 
@@ -172,7 +174,7 @@ if __name__ == '__main__':
     # Define all the poses
     robot_pose1: RobotPose = RobotPose(angles = [pi, -pi/2], axis = ['x', 'z'], tcp_position = [-0.30, 0.50, 0.30], frame_id = 'base_link')
     robot_pose2: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [0.30, 0.35, 0.40], frame_id='base_link')
-    robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.5, 0.2], frame_id='base_link')
+    robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.5, 0.3], frame_id='base_link')
     poses = [robot_pose1.compute_pose(), robot_pose2.compute_pose(), robot_pose3.compute_pose()]
 
     # Instantiate the publisher

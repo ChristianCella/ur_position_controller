@@ -147,43 +147,11 @@ void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
 }
 */
 
-
+/*
 void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
 {
   std::vector<std::string> joint_names = { "elbow_joint", "shoulder_pan_joint", "shoulder_lift_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"}; // TODO: parametrise or put inside kinematics
 
-  // TODO: fix me
-  // int i = 0;
-  // for(int index=0; index<msg.position.size(); index++)
-  // {
-  //   std::string joint_name = msg.name[index];
-  //   auto it = std::find(joint_names.begin(), joint_names.end(), joint_name);
-  //   if (it != joint_names.end()) // element found
-  //   {
-  //     int index = std::distance(joint_names.begin(), it);
-  //     this->joint_position[i] = msg.position[index];
-  //     i++;
-  //   }
-  // }
-
-  // elbow_joint
-  // shoulder_lift_joint
-  // shoulder_pan_joint
-  // wrist_1_joint
-  // wrist_2_joint
-  // wrist_3_joint
-
-  /*
-  - elbow_joint
-  - hande_left_finger_joint
-  - hande_right_finger_joint
-  - shoulder_lift_joint
-  - shoulder_pan_joint
-  - wrist_1_joint
-  - wrist_2_joint
-  - wrist_3_joint
-
-  */
 
   this->joint_position[0] = msg.position[4];
   this->joint_position[1] = msg.position[3];
@@ -194,6 +162,39 @@ void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
   this->joint_position[5] = msg.position[7];
 
   return;
+}
+*/
+
+void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
+{
+    // List of desired joint names
+    std::vector<std::string> joint_names = { "shoulder_pan_joint", "shoulder_lift_joint", 
+                                             "elbow_joint", "wrist_1_joint", 
+                                             "wrist_2_joint", "wrist_3_joint"};
+
+    // Map to store the correspondence between joint names and indices in msg.position
+    std::map<std::string, size_t> joint_index_map;
+
+    // Build the map based on msg.name
+    for (size_t i = 0; i < msg.name.size(); ++i)
+    {
+        joint_index_map[msg.name[i]] = i;
+    }
+
+    // Populate joint_position using the map
+    for (size_t i = 0; i < joint_names.size(); ++i)
+    {
+        auto it = joint_index_map.find(joint_names[i]);
+        if (it != joint_index_map.end())
+        {
+            this->joint_position[i] = msg.position[it->second];
+        }
+        else
+        {
+            // Handle the case where the joint name is not found in the message
+            ROS_WARN_STREAM("Joint " << joint_names[i] << " not found in JointState message.");
+        }
+    }
 }
 
 
@@ -326,8 +327,8 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   // this->pTfListener = new tf2_ros::TransformListener(this->tfBuffer);
 
   // Getting the controller gains from param file
-  this->Kp = Eigen::Vector3d(2, 2, 2);  // TODO: Parametrise
-  this->Ko = Eigen::Vector3d(2, 2, 2);  // TODO: Parametrise
+  this->Kp = Eigen::Vector3d(0.5, 0.5, 0.5);  // TODO: Parametrise
+  this->Ko = Eigen::Vector3d(0.5, 0.5, 0.5);  // TODO: Parametrise
   this->tf_reference_name = "teleop_link";                                    
   this->tf_tcp_name = "tool0";
 
