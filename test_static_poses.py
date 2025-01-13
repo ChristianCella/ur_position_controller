@@ -84,6 +84,7 @@ class RobotPose:
 
         # Get the quaternion
         self.quat = self.matrix_to_quaternion(self.rot_mat)
+        print(f"The quaternion is: {self.quat}")
 
         # Define the pose
         self.pose = PoseStamped()
@@ -95,7 +96,6 @@ class RobotPose:
         self.pose.pose.orientation.y = self.quat[1]
         self.pose.pose.orientation.z = self.quat[2]
         self.pose.pose.orientation.w = self.quat[3]
-
         return self.pose
        
 
@@ -137,17 +137,22 @@ class PosePublisher:
             else:
                 self.current_pose = self.tcp_pose[i]
             self.pub.publish(self.current_pose)
+            rospy.loginfo(f"The cartesian position is: {self.current_pose.pose.position}")
+            print(f"The orientation of the current pose is: {self.current_pose.pose.orientation}")
             #self.cl_closeGripper()
             #rospy.sleep(0.25)
             #rospy.loginfo(f"Closed gripper")
 
             if self.verbose: rospy.loginfo(f"Publishing desired pose {i+1}")
+            #rospy.loginfo(f"Desired pose: {self.current_pose}")
             self.verbose = False
 
             try:
                 (translation, rotation) = self.listener.lookupTransform(
                     self.current_pose.header.frame_id, 'tool0', rospy.Time(0)
                 )
+                print(f"The translation is: {translation}")
+                print(f"The rotation is: {rotation}")
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
                 rospy.logwarn("Could not lookup transform: %s", e)
                 self.rate.sleep()
@@ -172,10 +177,12 @@ class PosePublisher:
 if __name__ == '__main__':
     
     # Define all the poses
-    robot_pose1: RobotPose = RobotPose(angles = [pi, -pi/2], axis = ['x', 'z'], tcp_position = [-0.30, 0.50, 0.30], frame_id = 'base_link')
-    robot_pose2: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [0.30, 0.35, 0.40], frame_id='base_link')
-    robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.5, 0.3], frame_id='base_link')
-    poses = [robot_pose1.compute_pose(), robot_pose2.compute_pose(), robot_pose3.compute_pose()]
+    robot_pose1: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.50, 0.30], frame_id = 'base_link')
+    #robot_pose2: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [0.30, 0.35, 0.40], frame_id='base_link')
+    #robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.50, 0.30], frame_id='base_link')
+    poses = [robot_pose1.compute_pose()]
+
+    #rospy.loginfo(f"The poses are: {poses}")
 
     # Instantiate the publisher
     pose_publisher: PosePublisher = PosePublisher(topic_name='/desired_pose', 
