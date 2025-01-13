@@ -178,9 +178,9 @@ if __name__ == '__main__':
     
     # Define all the poses
     robot_pose1: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.50, 0.30], frame_id = 'base_link')
-    #robot_pose2: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [0.30, 0.35, 0.40], frame_id='base_link')
-    #robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.50, 0.30], frame_id='base_link')
-    poses = [robot_pose1.compute_pose()]
+    robot_pose2: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [0.30, 0.35, 0.40], frame_id='base_link')
+    robot_pose3: RobotPose = RobotPose(angles = [pi], axis = ['x'], tcp_position = [-0.30, 0.50, 0.30], frame_id='base_link')
+    poses = [robot_pose1.compute_pose(), robot_pose2.compute_pose(), robot_pose3.compute_pose()]
 
     #rospy.loginfo(f"The poses are: {poses}")
 
