@@ -57,3 +57,10 @@ As of now, only some tests can be performed. In particular, you can test the pos
     source (your_path_to_ws)/devel/setup.bash
     rosrun ur_position_controller position_controller
     ```
+
+As an alternative, the position controller can also be activated by running the python script [position_controller_python.py](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/position_controller_python.py), instead of running the node defined in [controller.cpp](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp):
+
+    ```
+    source (your_path_to_ws)/devel/setup.bash
+    rosrun ur_position_controller position_controller_python.py
+    ```
