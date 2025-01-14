@@ -112,7 +112,7 @@ class Controller:
         self.buffered_orientation = []
         robot_description = rospy.get_param("robot_description", "")
         self.kinematics = Kinematics(robot_description)
-        self.kinematics.set_chain("base_link", "tool0")
+        self.kinematics.set_chain("teleop_link", "tool0")
 
     def joint_state_callback(self, msg):
         joint_names = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -148,7 +148,7 @@ class Controller:
         axis_angle = R.from_matrix(delta_R).as_rotvec()
 
         # Handle zero rotation case
-        if np.linalg.norm(axis_angle) < 1e-6:  # Threshold to check for near-zero rotation
+        if np.linalg.norm(axis_angle) < 1e-1:  # Threshold to check for near-zero rotation
             self.interpolator_orientation = Interpolator(
                 lambda t: start_orientation,  # No rotation; keep the start orientation
                 duration
