@@ -85,7 +85,7 @@ class Controller:
 
         robot_description = rospy.get_param("robot_description", "")
         self.kinematics = Kinematics(robot_description)
-        self.kinematics.set_chain("teleop_link", "tool0")
+        self.kinematics.set_chain("base_link", "tool0")
 
     def joint_state_callback(self, msg):
         joint_names = ["shoulder_pan_joint", "shoulder_lift_joint", 
@@ -140,6 +140,8 @@ class Controller:
 
         joint_velocities = np.dot(np.linalg.pinv(jacobian), control_input)
         self.publish_joint_velocities(joint_velocities)
+
+        rospy.loginfo("Control action computed.")
 
     def publish_joint_velocities(self, joint_velocities):
         msg = Float64MultiArray()

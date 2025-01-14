@@ -84,7 +84,6 @@ class RobotPose:
 
         # Get the quaternion
         self.quat = self.matrix_to_quaternion(self.rot_mat)
-        print(f"The quaternion is: {self.quat}")
 
         # Define the pose
         self.pose = PoseStamped()
@@ -137,8 +136,6 @@ class PosePublisher:
             else:
                 self.current_pose = self.tcp_pose[i]
             self.pub.publish(self.current_pose)
-            rospy.loginfo(f"The cartesian position is: {self.current_pose.pose.position}")
-            print(f"The orientation of the current pose is: {self.current_pose.pose.orientation}")
             #self.cl_closeGripper()
             #rospy.sleep(0.25)
             #rospy.loginfo(f"Closed gripper")
@@ -151,8 +148,6 @@ class PosePublisher:
                 (translation, rotation) = self.listener.lookupTransform(
                     self.current_pose.header.frame_id, 'tool0', rospy.Time(0)
                 )
-                print(f"The translation is: {translation}")
-                print(f"The rotation is: {rotation}")
             except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
                 rospy.logwarn("Could not lookup transform: %s", e)
                 self.rate.sleep()
