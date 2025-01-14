@@ -143,6 +143,7 @@ class Controller:
     def desired_pose_callback(self, msg):
         '''
         Get the desired pose from the /desired_pose topic. 
+        Every time a new value is published, this callback is activated.
         '''
         self.desired_pose = msg.pose
 
@@ -212,6 +213,7 @@ if __name__ == "__main__":
 
     controller = Controller(rospy, control_rate)
 
+    # Every 0.002 seconds, compute the control action (= publish joint velocities)
     while not rospy.is_shutdown():
         controller.compute_control_action()
         rate.sleep()
