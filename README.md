@@ -64,3 +64,9 @@ As an alternative, the position controller can also be activated by running the 
     source (your_path_to_ws)/devel/setup.bash
     rosrun ur_position_controller position_controller_python.py
     ```
+
+---
+
+### **For teleoperation** <a name="usage"></a> 🎮
+
+This package is pivotal to teleoperate the ur5e robot. For further details, llok at the branch ```dev_chris``` at the following [link](https://github.com/ChristianCella/quest2ros/tree/dev_chris). At the moment, you can either use the [position controller](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/src/controller.cpp) in c++ or the one implemented in python (defined [here](https://github.com/ChristianCella/ur_position_controller/blob/dev_chris/position_controller_python.py)); remember to impose ```teleop_link``` instead of ```base_link```, regardless of code you are using!
