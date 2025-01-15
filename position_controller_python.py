@@ -14,6 +14,16 @@ from urdf_parser_py.urdf import URDF
 import PyKDL as kdl
 
 def compute_orientation_error(tcp_orientation, desired_orientation):
+    """
+    Compute orientation error based on rotation matrices.
+    tcp_orientation = Rtcp ==> 3x3 rotation matrix
+    desired_orientation = Rdes ==> 3x3 rotation matrix
+    DeltaR = Rdes * Rtcp.T
+    orientation_error = Skew-symmetric part of DeltaR:
+        e_x = DeltaR(2, 1) - DeltaR(1, 2)
+        e_y = DeltaR(0, 2) - DeltaR(2, 0)
+        e_z = DeltaR(1, 0) - DeltaR(0, 1)
+    """
     delta_R = np.dot(desired_orientation, tcp_orientation.T)
     orientation_error = np.array([
         delta_R[2, 1] - delta_R[1, 2],
@@ -23,6 +33,17 @@ def compute_orientation_error(tcp_orientation, desired_orientation):
     return orientation_error
 
 class LinearTimeLaw:
+    ''' 
+    Linear interpolation between two points in a given time duration.
+    This outputs the path function p(s(t)), with s(t) being the time law.
+    The formula is the following:
+        p(s(t)) = x_i + (x_f - x_i) * s(t)
+        - x_i: initial point
+        - x_f: final point
+        - t: specific time
+        - dt: time span given by the publishing node (1 / 50)
+        - t/dt = s(t) = alpha (time parametrization, s belongs to [0, 1])   
+    '''
     def __init__(self, start, end, duration):
         self.start = start
         self.end = end
@@ -31,19 +52,29 @@ class LinearTimeLaw:
     def evaluate(self, t):
         if t > self.duration:
             return self.end
+        
+        # This is the linear interpolation formula on the abscissa: t will take values multiples of 1/500=0.002
         alpha = t / self.duration
+
+        # What you are returning now is p(s(t)) = x_i + (x_f - x_i) * s(t)
         return self.start + alpha * (self.end - self.start)
 
-class Interpolator:
+class Interpolator: 
+    ''' 
+    Interpolator class to generate a trajectory between two points in a given time duration.
+    The path function is a function of time s(t) that returns 
+        the desired point at time t (you can define a lambda function that works with 'LinearTimeLaw').
+    '''
     def __init__(self, path_function, duration):
         self.path_function = path_function
         self.duration = duration
 
     def discretize_trajectory(self, rate, start_time):
-        sampling_time = 1.0 / rate
-        time = start_time
+        sampling_time = 1.0 / rate # 0.002 in case of 500 Hz
+        time = start_time # Usually 0 at the beginning
         points = []
 
+        # Until you reach the time taken by the publishing node to send the desired pose
         while time < self.duration:
             points.append(self.path_function(time))
             time += sampling_time
@@ -129,7 +160,7 @@ class Controller:
             q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
             self.prev_orientation = R.from_quat(q).as_matrix()
         else:
-            delta_time = 1.0 / 50.0
+            delta_time = 1.0 / 100.0 # put here teh frequency of the node that publsihes the desired pose
             current_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
             q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
             current_orientation = R.from_quat(q).as_matrix()
@@ -144,9 +175,20 @@ class Controller:
             duration
         )
 
-        delta_R = np.dot(end_orientation, start_orientation.T)
-        axis_angle = R.from_matrix(delta_R).as_rotvec()
+        ''' 
+        Compute the axis angle representation of the rotation matrix.
+        start_orientation = Rstart ==> 3x3 rotation matrix
+        end_orientation = Rend ==> 3x3 rotation matrix
+        R^i_f = deltaR = Rstart^T * Rend
+        NOTE: the code handles the case where the rotation is zero, that could lead to numerical
+            instability when computing the norm of the axis_angle vector (you should divide by zero).
+        '''
+        delta_R = np.dot(start_orientation.T, end_orientation)
 
+        # Pass to axis-angle representation (delta_R => r_vector = axis_angle)
+        # np.linalg.norm = ||axis_angle|| = rotation angle
+        axis_angle = R.from_matrix(delta_R).as_rotvec()
+      
         # Handle zero rotation case
         if np.linalg.norm(axis_angle) < 1e-1:  # Threshold to check for near-zero rotation
             self.interpolator_orientation = Interpolator(
@@ -154,6 +196,10 @@ class Controller:
                 duration
             )
         else:
+            # LinearTimeLaw(0, np.linalg.norm(axis_angle), duration).evaluate => s(t_k)
+            # LinearTimeLaw(0, np.linalg.norm(axis_angle), duration).evaluate(t) * axis_angle = s(t_k) * r_vector
+            # R.from_rotvec(s(t_k) * r_vector) = matrix exponential exp(s(t_k) * r_vector)
+            # R_prev * exp(s(t_k) * r_vector) = R_desired (implicit in the interpolator)
             self.interpolator_orientation = Interpolator(
                 lambda t: R.from_rotvec(
                     LinearTimeLaw(0, np.linalg.norm(axis_angle), duration).evaluate(t) * 
@@ -170,6 +216,7 @@ class Controller:
         if not self.buffered_position or not self.buffered_orientation:
             return
 
+        # Compute the 'feedback' cartesian value
         tcp_pose = self.kinematics.compute_fk(self.joint_positions)
         if tcp_pose is None:
             return
@@ -181,23 +228,26 @@ class Controller:
             [tcp_pose.M[2, 0], tcp_pose.M[2, 1], tcp_pose.M[2, 2]]
         ])
 
+        # Thanks to the interpolator, we can now get the desired position and orientation
         desired_position = self.buffered_position.pop(0)
         desired_orientation = self.buffered_orientation.pop(0)
 
+        # Calculate the errors (watch out for the orientation error...)
         position_error = desired_position - tcp_position
         orientation_error = compute_orientation_error(tcp_orientation, desired_orientation)
 
+        # Calculate the control input
         control_input_p = self.kp * position_error
         control_input_o = self.ko * orientation_error
         control_input = np.hstack((control_input_p, control_input_o))
 
+        # Pass from cartesian to joint space
         jacobian = self.kinematics.compute_jacobian(self.joint_positions)
         if jacobian is None or np.linalg.det(jacobian) == 0:
             rospy.logerr("Jacobian is singular or invalid.")
             return
-
         joint_velocities = np.dot(np.linalg.pinv(jacobian), control_input)
-        self.publish_joint_velocities(joint_velocities)
+        self.publish_joint_velocities(joint_velocities) # publish at 500 Hz
 
     def publish_joint_velocities(self, joint_velocities):
         msg = Float64MultiArray()
