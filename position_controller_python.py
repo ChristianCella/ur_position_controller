@@ -1,55 +1,14 @@
 #!/usr/bin/env python
 
 import rospy
-from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Float64MultiArray
 import numpy as np
-import tf.transformations as tf
 from scipy.spatial.transform import Rotation as R
-
-# Import robot kinematic libraries
+from ros_dmp.msg import CartesianTrajectory
 from kdl_parser_py.urdf import treeFromUrdfModel
 from urdf_parser_py.urdf import URDF
 import PyKDL as kdl
-
-def compute_orientation_error(tcp_orientation, desired_orientation):
-    delta_R = np.dot(desired_orientation, tcp_orientation.T)
-    orientation_error = np.array([
-        delta_R[2, 1] - delta_R[1, 2],
-        delta_R[0, 2] - delta_R[2, 0],
-        delta_R[1, 0] - delta_R[0, 1]
-    ])
-    return orientation_error
-
-class LinearTimeLaw:
-    def __init__(self, start, end, duration):
-        self.start = start
-        self.end = end
-        self.duration = duration
-
-    def evaluate(self, t):
-        if t > self.duration:
-            return self.end
-        alpha = t / self.duration
-        return self.start + alpha * (self.end - self.start)
-
-class Interpolator:
-    def __init__(self, path_function, duration):
-        self.path_function = path_function
-        self.duration = duration
-
-    def discretize_trajectory(self, rate, start_time):
-        sampling_time = 1.0 / rate
-        time = start_time
-        points = []
-
-        while time < self.duration:
-            points.append(self.path_function(time))
-            time += sampling_time
-
-        remaining_time = max(0.0, self.duration - time)
-        return points, remaining_time
 
 class Kinematics:
     def __init__(self, robot_description):
@@ -65,19 +24,47 @@ class Kinematics:
             rospy.logerr(f"Failed to create KDL chain from {start} to {end}.")
             return
         rospy.loginfo(f"KDL chain created with {self.chain.getNrOfJoints()} joints.")
-        self.fk_solver = kdl.ChainFkSolverPos_recursive(self.chain)
+        self.ik_solver = kdl.ChainIkSolverPos_LMA(self.chain)
         self.jac_solver = kdl.ChainJntToJacSolver(self.chain)
+        self.fk_solver = kdl.ChainFkSolverPos_recursive(self.chain)
 
     def compute_fk(self, joints):
         joint_array = kdl.JntArray(len(joints))
         for i, joint in enumerate(joints):
             joint_array[i] = joint
+
         cartesian_pose = kdl.Frame()
-        result = self.fk_solver.JntToCart(joint_array, cartesian_pose)
-        if result < 0:
-            rospy.logerr("Failed to calculate forward kinematics")
+        if self.fk_solver.JntToCart(joint_array, cartesian_pose) < 0:
+            rospy.logerr("Failed to compute forward kinematics")
             return None
         return cartesian_pose
+
+    def compute_ik(self, desired_pose, current_joint_positions):
+        joint_array = kdl.JntArray(len(current_joint_positions))
+        for i, joint in enumerate(current_joint_positions):
+            joint_array[i] = joint
+
+        try:
+            rotation_matrix = kdl.Rotation(
+                desired_pose[0, 0], desired_pose[0, 1], desired_pose[0, 2],
+                desired_pose[1, 0], desired_pose[1, 1], desired_pose[1, 2],
+                desired_pose[2, 0], desired_pose[2, 1], desired_pose[2, 2]
+            )
+        except Exception as e:
+            rospy.logerr(f"Invalid rotation matrix: {e}")
+            return None
+
+        position_vector = kdl.Vector(
+            desired_pose[0, 3], desired_pose[1, 3], desired_pose[2, 3]
+        )
+        kdl_pose = kdl.Frame(rotation_matrix, position_vector)
+
+        result = kdl.JntArray(len(current_joint_positions))
+        if self.ik_solver.CartToJnt(joint_array, kdl_pose, result) < 0:
+            rospy.logerr("Failed to calculate inverse kinematics")
+            return None
+
+        return np.array([result[i] for i in range(result.rows())])
 
     def compute_jacobian(self, joints):
         joint_array = kdl.JntArray(len(joints))
@@ -95,24 +82,38 @@ class Kinematics:
                 jacobian_np[i, j] = jacobian[i, j]
         return jacobian_np
 
+class Interpolator:
+    def __init__(self, trajectory_points, duration):
+        self.trajectory_points = trajectory_points
+        self.duration = duration
+
+    def interpolate(self, t):
+        num_points = len(self.trajectory_points)
+        if num_points == 1:
+            return self.trajectory_points[0]
+
+        if t >= self.duration:
+            return self.trajectory_points[-1]
+
+        idx = int((t / self.duration) * (num_points - 1))
+        alpha = (t / self.duration) * (num_points - 1) - idx
+
+        return self.trajectory_points[idx] * (1 - alpha) + self.trajectory_points[idx + 1] * alpha
+
 class Controller:
     def __init__(self, nh, control_rate):
         self.nh = nh
         self.control_rate = control_rate
-        self.kp = np.array([1, 1, 1])
-        self.ko = np.array([1, 1, 1])
         self.joint_state_sub = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
-        self.desired_pose_sub = rospy.Subscriber("/desired_pose", PoseStamped, self.desired_pose_callback)
+        self.trajectory_sub = rospy.Subscriber("/generate_motion_service_node/cartesian_trajectory", CartesianTrajectory, self.trajectory_callback)
         self.joint_velocity_pub = rospy.Publisher("/joint_group_vel_controller/command", Float64MultiArray, queue_size=1)
         self.joint_positions = np.zeros(6)
-        self.desired_pose = None
         self.interpolator_position = None
         self.interpolator_orientation = None
-        self.buffered_position = []
-        self.buffered_orientation = []
+        self.interpolator_velocity = None
         robot_description = rospy.get_param("robot_description", "")
         self.kinematics = Kinematics(robot_description)
-        self.kinematics.set_chain("teleop_link", "tool0")
+        self.kinematics.set_chain("base_link", "tool0")
 
     def joint_state_callback(self, msg):
         joint_names = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -122,81 +123,73 @@ class Controller:
             if joint_name in joint_index_map:
                 self.joint_positions[i] = msg.position[joint_index_map[joint_name]]
 
-    def desired_pose_callback(self, msg):
-        if self.desired_pose is None:
-            self.desired_pose = msg.pose
-            self.prev_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-            q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
-            self.prev_orientation = R.from_quat(q).as_matrix()
-        else:
-            delta_time = 1.0 / 50.0
-            current_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-            q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
-            current_orientation = R.from_quat(q).as_matrix()
-            self.create_interpolators(self.prev_position, current_position, self.prev_orientation, current_orientation, delta_time)
-            self.prev_position = current_position
-            self.prev_orientation = current_orientation
+    def trajectory_callback(self, msg):
+        positions = []
+        orientations = []
+        velocities = []
+
+        rospy.loginfo(f"The current published pose is {msg.cartesian_state[0].pose}")
+
+        for state in msg.cartesian_state:
+            positions.append([state.pose.position.x, state.pose.position.y, state.pose.position.z])
+            orientations.append([
+                state.pose.orientation.x,
+                state.pose.orientation.y,
+                state.pose.orientation.z,
+                state.pose.orientation.w
+            ])
+            velocities.append([
+                state.vel.linear.x, state.vel.linear.y, state.vel.linear.z,
+                state.vel.angular.x, state.vel.angular.y, state.vel.angular.z
+            ])
+
+        duration = len(msg.cartesian_state) / self.control_rate
+        self.interpolator_position = Interpolator(np.array(positions), duration)
+        self.interpolator_orientation = Interpolator(np.array(orientations), duration)
+        self.interpolator_velocity = Interpolator(np.array(velocities), duration)
 
 
-    def create_interpolators(self, start_position, end_position, start_orientation, end_orientation, duration):
-        self.interpolator_position = Interpolator(
-            lambda t: LinearTimeLaw(start_position, end_position, duration).evaluate(t), 
-            duration
-        )
-
-        delta_R = np.dot(end_orientation, start_orientation.T)
-        axis_angle = R.from_matrix(delta_R).as_rotvec()
-
-        # Handle zero rotation case
-        if np.linalg.norm(axis_angle) < 1e-1:  # Threshold to check for near-zero rotation
-            self.interpolator_orientation = Interpolator(
-                lambda t: start_orientation,  # No rotation; keep the start orientation
-                duration
-            )
-        else:
-            self.interpolator_orientation = Interpolator(
-                lambda t: R.from_rotvec(
-                    LinearTimeLaw(0, np.linalg.norm(axis_angle), duration).evaluate(t) * 
-                    axis_angle / np.linalg.norm(axis_angle)
-                ).as_matrix(),
-                duration
-            )
-
-        self.buffered_position, _ = self.interpolator_position.discretize_trajectory(self.control_rate, 0.0)
-        self.buffered_orientation, _ = self.interpolator_orientation.discretize_trajectory(self.control_rate, 0.0)
-
-
-    def compute_control_action(self):
-        if not self.buffered_position or not self.buffered_orientation:
+    def compute_and_publish_joint_velocities(self):
+        if not self.interpolator_position or not self.interpolator_orientation or not self.interpolator_velocity:
             return
 
-        tcp_pose = self.kinematics.compute_fk(self.joint_positions)
-        if tcp_pose is None:
+        t = rospy.get_time() % self.interpolator_position.duration
+
+        # Interpolated position, orientation, and velocity
+        desired_position_delta = self.interpolator_position.interpolate(t)
+        desired_orientation_quat = self.interpolator_orientation.interpolate(t)
+        desired_orientation = R.from_quat(desired_orientation_quat).as_matrix()
+        cartesian_velocity = self.interpolator_velocity.interpolate(t)
+
+        # Get current TCP position from forward kinematics
+        current_tcp_pose = self.kinematics.compute_fk(self.joint_positions)
+        if current_tcp_pose is None:
             return
 
-        tcp_position = np.array([tcp_pose.p[0], tcp_pose.p[1], tcp_pose.p[2]])
-        tcp_orientation = np.array([
-            [tcp_pose.M[0, 0], tcp_pose.M[0, 1], tcp_pose.M[0, 2]],
-            [tcp_pose.M[1, 0], tcp_pose.M[1, 1], tcp_pose.M[1, 2]],
-            [tcp_pose.M[2, 0], tcp_pose.M[2, 1], tcp_pose.M[2, 2]]
-        ])
+        # Extract current position and compute the new desired position
+        current_position = np.array([current_tcp_pose.p[0], current_tcp_pose.p[1], current_tcp_pose.p[2]])
+        desired_position = current_position + desired_position_delta
 
-        desired_position = self.buffered_position.pop(0)
-        desired_orientation = self.buffered_orientation.pop(0)
+        # Build the desired pose matrix
+        desired_tcp_pose = np.eye(4)
+        desired_tcp_pose[:3, 3] = desired_position
+        desired_tcp_pose[:3, :3] = desired_orientation
 
-        position_error = desired_position - tcp_position
-        orientation_error = compute_orientation_error(tcp_orientation, desired_orientation)
+        #rospy.loginfo(f"Desired position: {desired_tcp_pose}")
 
-        control_input_p = self.kp * position_error
-        control_input_o = self.ko * orientation_error
-        control_input = np.hstack((control_input_p, control_input_o))
+        # Compute joint positions via inverse kinematics
+        joint_positions = self.kinematics.compute_ik(desired_tcp_pose, self.joint_positions)
+        if joint_positions is None:
+            return
 
-        jacobian = self.kinematics.compute_jacobian(self.joint_positions)
-        if jacobian is None or np.linalg.det(jacobian) == 0:
+        # Compute Jacobian for these joint positions
+        jacobian = self.kinematics.compute_jacobian(joint_positions)
+        if jacobian is None or jacobian.shape[0] != 6:
             rospy.logerr("Jacobian is singular or invalid.")
             return
 
-        joint_velocities = np.dot(np.linalg.pinv(jacobian), control_input)
+        # Compute joint velocities from Cartesian velocity
+        joint_velocities = np.dot(np.linalg.pinv(jacobian), cartesian_velocity)
         self.publish_joint_velocities(joint_velocities)
 
     def publish_joint_velocities(self, joint_velocities):
@@ -211,5 +204,5 @@ if __name__ == "__main__":
     controller = Controller(rospy, control_rate)
 
     while not rospy.is_shutdown():
-        controller.compute_control_action()
+        controller.compute_and_publish_joint_velocities()
         rate.sleep()
