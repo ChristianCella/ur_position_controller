@@ -9,6 +9,9 @@ import time
 import tf.transformations as tf
 from scipy.spatial.transform import Rotation as R
 
+# Import ROS messages
+from ros_dmp.msg import *
+
 # Import robot kinematic libraries
 from kdl_parser_py.urdf import treeFromUrdfModel
 from urdf_parser_py.urdf import URDF
@@ -103,8 +106,8 @@ class Kinematics:
 
 class TimeLaw:
     """
-    Base class for all time laws. It defines the interface for evaluate,
-    evaluate_derivative, and get_parameters methods.
+    Base class for all time laws. It defines the interface for the methods 'evaluate',
+    'evaluate_derivative', and 'get_parameters methods'.
     """
     def evaluate(self, t):
         raise NotImplementedError("Evaluate method must be implemented in subclasses.")
@@ -217,7 +220,7 @@ class Controller:
         self.kp = np.array([0.1, 0.1, 0.1])
         self.ko = np.array([0.1, 0.1, 0.1])
         self.joint_state_sub = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
-        self.desired_pose_sub = rospy.Subscriber("/desired_pose", PoseStamped, self.desired_pose_callback)
+        self.desired_pose_sub = rospy.Subscriber("/generate_motion_service_node/cartesian_trajectory", CartesianTrajectory, self.desired_pose_callback)
         self.joint_velocity_pub = rospy.Publisher("/joint_group_vel_controller/command", Float64MultiArray, queue_size=1)
         self.joint_positions = np.zeros(6)
         self.desired_pose = None
@@ -228,8 +231,12 @@ class Controller:
         robot_description = rospy.get_param("robot_description", "")
         self.kinematics = Kinematics(robot_description)
         self.kinematics.set_chain("base_link", "tool0")
-        self.prev_velocity = np.zeros(3)
-        self.prev_acceleration = np.zeros(3)
+        self.prev_position = None
+        self.prev_orientation = None
+        self.prev_velocity = np.zeros(6)
+        self.prev_acceleration = np.zeros(6)
+        self.dt = rospy.get_param("/dt")
+        self.k = 1
 
     def joint_state_callback(self, msg):
         joint_names = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -240,34 +247,100 @@ class Controller:
                 self.joint_positions[i] = msg.position[joint_index_map[joint_name]]
 
     def desired_pose_callback(self, msg):
-        if self.desired_pose is None:
-            self.desired_pose = msg.pose
-            self.prev_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-            q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
-            self.prev_orientation = R.from_quat(q).as_matrix()
-            self.prev_velocity = np.zeros(3)
-            self.prev_acceleration = np.zeros(3)
-        else:
-            delta_time = 1.0 / 100.0
-            current_position = np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
-            q = [msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]
-            current_orientation = R.from_quat(q).as_matrix()
+        """
+        Callback to process incoming CartesianTrajectory messages.
+        Updates current_position based on TCP position and relative position values.
+        """
+        if not msg.cartesian_state:
+            rospy.logwarn("Received CartesianTrajectory message with no states.")
+            return
 
-            current_velocity = (current_position - self.prev_position) / delta_time
-            current_acceleration = (current_velocity - self.prev_velocity) / delta_time
+        # Extract the latest state from the CartesianState array
+        latest_state = msg.cartesian_state[-1]
 
-            self.create_interpolators(
-                self.prev_position, current_position, 
-                self.prev_orientation, current_orientation, 
-                delta_time,
-                start_velocity=self.prev_velocity, end_velocity=current_velocity,
-                start_acceleration=self.prev_acceleration, end_acceleration=current_acceleration
-            )
+        # Get current TCP position from kinematics
+        tcp_pose = self.kinematics.compute_fk(self.joint_positions)
+        if tcp_pose is None:
+            rospy.logerr("Failed to compute TCP position.")
+            return
+        tcp_position = np.array([tcp_pose.p[0], tcp_pose.p[1], tcp_pose.p[2]])
+        rospy.loginfo(f"Current TCP Position: {tcp_position}")
 
+        # Add relative position to the current TCP position
+        current_position = tcp_position + np.array([
+            latest_state.pose.position.x,
+            latest_state.pose.position.y,
+            latest_state.pose.position.z
+        ])
+
+        # Extract and process the orientation (convert quaternion to rotation matrix)
+        quaternion = [
+            latest_state.pose.orientation.x,
+            latest_state.pose.orientation.y,
+            latest_state.pose.orientation.z,
+            latest_state.pose.orientation.w
+        ]
+        current_orientation = R.from_quat(quaternion).as_matrix()
+
+        # Initialize previous state on the first callback
+        if self.prev_position is None:
             self.prev_position = current_position
             self.prev_orientation = current_orientation
-            self.prev_velocity = current_velocity
-            self.prev_acceleration = current_acceleration
+            self.prev_velocity = np.zeros(3)
+            self.prev_acceleration = np.zeros(3)
+            rospy.loginfo("Initialized previous state.")
+            return
+
+        # Extract linear and angular velocities
+        current_velocity = np.array([
+            latest_state.vel.linear.x,
+            latest_state.vel.linear.y,
+            latest_state.vel.linear.z,
+            latest_state.vel.angular.x,
+            latest_state.vel.angular.y,
+            latest_state.vel.angular.z
+        ])
+
+        # Extract linear and angular accelerations
+        current_acceleration = np.array([
+            latest_state.acc.linear.x,
+            latest_state.acc.linear.y,
+            latest_state.acc.linear.z,
+            latest_state.acc.angular.x,
+            latest_state.acc.angular.y,
+            latest_state.acc.angular.z
+        ])
+
+
+        # Use delta_time to compute interpolators
+        delta_time = self.dt
+
+        # Add validation to ensure previous orientation is valid
+        if self.prev_orientation is None or current_orientation is None:
+            rospy.logerr("Invalid orientation data detected. Skipping update.")
+            return
+
+        self.create_interpolators(
+            self.prev_position, current_position,
+            self.prev_orientation, current_orientation,
+            delta_time,
+            start_velocity=self.prev_velocity, end_velocity=current_velocity,
+            start_acceleration=self.prev_acceleration, end_acceleration=current_acceleration
+        )
+
+        # Update the previous state variables
+        self.prev_position = current_position
+        self.prev_orientation = current_orientation
+        self.prev_velocity = current_velocity
+        self.prev_acceleration = current_acceleration
+
+
+        rospy.loginfo(f"Updated TCP State: Position={current_position}, Orientation=\n{current_orientation}")
+        rospy.loginfo(f"Linear Velocity={current_velocity}")
+        rospy.loginfo(f"Linear Acceleration={current_acceleration}")
+
+
+
 
     def create_time_law(self, start, end, duration, start_velocity=None, end_velocity=None, start_acceleration=None, end_acceleration=None):
         """
@@ -290,12 +363,21 @@ class Controller:
 
 
     def create_interpolators(self, start_position, end_position, start_orientation, end_orientation, duration, 
-                             start_velocity=None, end_velocity=None, start_acceleration=None, end_acceleration=None):
+                         start_velocity=None, end_velocity=None, start_acceleration=None, end_acceleration=None):
+        """
+        Creates interpolators for position and orientation that respect the desired motion duration.
+        """
+        if start_orientation is None or end_orientation is None:
+            rospy.logerr("Cannot create orientation interpolator: Start or end orientation is None.")
+            return
+
+        # Generate position interpolation
         time_law_position = self.create_time_law(start_position, end_position, duration, 
-                                                 start_velocity=start_velocity, end_velocity=end_velocity, 
-                                                 start_acceleration=start_acceleration, end_acceleration=end_acceleration)
+                                                start_velocity=start_velocity, end_velocity=end_velocity, 
+                                                start_acceleration=start_acceleration, end_acceleration=end_acceleration)
         self.interpolator_position = Interpolator(lambda t: time_law_position.evaluate(t), duration)
 
+        # Generate orientation interpolation
         delta_R = np.dot(start_orientation.T, end_orientation)
         axis_angle = R.from_matrix(delta_R).as_rotvec()
 
@@ -308,15 +390,29 @@ class Controller:
                 duration
             )
 
+        # Discretize trajectory for control loop
         self.buffered_position, _ = self.interpolator_position.discretize_trajectory(self.control_rate, 0.0)
         self.buffered_orientation, _ = self.interpolator_orientation.discretize_trajectory(self.control_rate, 0.0)
 
+
+
+    #import time  # Ensure the time module is imported
+
     def compute_control_action(self):
+        """
+        Computes the control action to follow the trajectory accurately and respect the desired motion duration.
+        Displays the time taken to compute each control action.
+        """
         if not self.buffered_position or not self.buffered_orientation:
             return
 
+        # Record the start time
+        start_time = time.time()
+
+        # Get current TCP position and orientation
         tcp_pose = self.kinematics.compute_fk(self.joint_positions)
         if tcp_pose is None:
+            rospy.logerr("Failed to compute TCP position.")
             return
 
         tcp_position = np.array([tcp_pose.p[0], tcp_pose.p[1], tcp_pose.p[2]])
@@ -326,42 +422,63 @@ class Controller:
             [tcp_pose.M[2, 0], tcp_pose.M[2, 1], tcp_pose.M[2, 2]]
         ])
 
+        # Get the next desired state from the interpolated trajectory
         desired_position = self.buffered_position.pop(0)
         desired_orientation = self.buffered_orientation.pop(0)
 
+        # Compute position and orientation errors
         position_error = desired_position - tcp_position
         orientation_error = compute_orientation_error(tcp_orientation, desired_orientation)
 
+        # Compute control inputs using proportional gains
         control_input_p = self.kp * position_error
         control_input_o = self.ko * orientation_error
         control_input = np.hstack((control_input_p, control_input_o))
 
+        # Compute joint velocities using the control inputs
         jacobian = self.kinematics.compute_jacobian(self.joint_positions)
         if jacobian is None or np.linalg.det(jacobian) == 0:
             rospy.logerr("Jacobian is singular or invalid.")
             return
         joint_velocities = np.dot(np.linalg.pinv(jacobian), control_input)
+
+        # Publish the joint velocities
         self.publish_joint_velocities(joint_velocities)
+
+        # Record the end time and calculate the computation time
+        end_time = time.time()
+        computation_time = end_time - start_time
+
+        # Display the computation time on the terminal
+        rospy.loginfo(f"Control action computed in {computation_time:.6f} seconds")
+        rospy.loginfo(f"Computed the control action number: {self.k}")
+        self.k = self.k + 1
+
+
 
     def publish_joint_velocities(self, joint_velocities):
         msg = Float64MultiArray()
         msg.data = joint_velocities.tolist()
         self.joint_velocity_pub.publish(msg)
 
+from time import perf_counter
+
 if __name__ == "__main__":
     rospy.init_node("position_controller")
     control_rate = 500.0
-    time_law_type = "cubic"  # Options: "linear", "cubic", "quintic"
+    time_law_type = "linear"  # Options: "linear", "cubic", "quintic"
     controller = Controller(rospy, control_rate, time_law_type)
 
     rate = rospy.Rate(control_rate)
+    last_time = perf_counter()
 
-    last_time = time.time()  # Initialize the timer
     while not rospy.is_shutdown():
-        current_time = time.time()
+        current_time = perf_counter()
         elapsed_time = current_time - last_time
-        frequency = 1.0 / elapsed_time if elapsed_time > 0 else 0  # Compute frequency
+        frequency = 1.0 / elapsed_time if elapsed_time > 0 else 0
         rospy.loginfo(f"Control Loop Frequency: {frequency:.2f} Hz")
         last_time = current_time
+
         controller.compute_control_action()
         rate.sleep()
+
