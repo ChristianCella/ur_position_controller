@@ -42,6 +42,8 @@ void Controller::DesiredPoseCallback(const geometry_msgs::PoseStamped& msg)
   // ros::Time now = msg.header.stamp;
   // double delta_time = (now - this->prev_time).toSec();
 
+  is_pose_stream_active = true; // New pose received
+
   Eigen::Affine3d desired_pose;
   Eigen::fromMsg(msg.pose, desired_pose);
   Eigen::Vector3d tcp_increment = desired_pose.translation();
@@ -146,6 +148,13 @@ void Controller::JointStateCallback(const sensor_msgs::JointState& msg)
     }
 }
 
+void Controller::PublishZeroVelocities()
+{
+    std_msgs::Float64MultiArray zero_vel;
+    zero_vel.data = std::vector<double>(6, 0.0); // Assuming 6 DOF
+    joint_velocity_pub.publish(zero_vel);
+    ROS_INFO("Published zero velocities to stop the robot.");
+}
 
 
 void Controller::ComputeControlAction()
@@ -166,6 +175,16 @@ void Controller::ComputeControlAction()
   feedback_pub.publish(feedback);
 
   // ---------------- Debug topics ---------------- //
+  // Check if pose stream has ended and buffers are empty
+  if (!is_pose_stream_active && buffered_position.empty() && buffered_orientation.empty())
+  {
+      ROS_INFO("Control actions stopped: No new poses and buffers are empty.");
+      PublishZeroVelocities(); // Ensure robot stops moving
+      return; // Stop control computation
+  }
+
+  // Reset pose stream flag to detect inactivity
+  is_pose_stream_active = false;
 
   if (this->buffered_position.empty() || this->buffered_orientation.empty())
     return;
@@ -305,8 +324,8 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   // Creating the TF listener
   // this->pTfListener = new tf2_ros::TransformListener(this->tfBuffer);
   // Getting the controller gains from param file
-  this->Kp = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
-  this->Ko = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
+  this->Kp = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
+  this->Ko = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
 
   ROS_INFO("Checkpoint 7.");
 

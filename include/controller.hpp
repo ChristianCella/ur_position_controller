@@ -266,6 +266,7 @@ class Controller
 public:
   Controller(ros::NodeHandle& nh, double control_loop_rate);
   void ComputeControlAction();
+  void PublishZeroVelocities();
 
 private:
   void JointStateCallback(const sensor_msgs::JointState& msg);
@@ -327,6 +328,7 @@ private:
 
   // Robot parameters
   double robot_loop_rate; // TODO: parametrise
+  bool is_pose_stream_active = true;
 
   // Controller gains
   Eigen::Vector3d Kp;
