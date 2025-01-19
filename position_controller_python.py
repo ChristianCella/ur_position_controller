@@ -195,11 +195,11 @@ class Interpolator:
     The path function is a function of time s(t) that returns 
         the desired point at time t.
     """
-    def __init__(self, path_function, duration):
+    def __init__(self, path_function, duration, counter):
         self.path_function = path_function
         self.duration = duration
 
-    def discretize_trajectory(self, rate, start_time):
+    def discretize_trajectory(self, rate, start_time, counter):
         sampling_time = 1.0 / rate  # 0.002 in case of 500 Hz
         time = start_time  # Usually 0 at the beginning
         points = []
@@ -210,6 +210,8 @@ class Interpolator:
             time += sampling_time
 
         remaining_time = max(0.0, self.duration - time)
+        rospy.loginfo(f"The number of points in the buffer is: {len(points)}")
+        rospy.loginfo(f"Need for bufferization number: {counter}")
         return points, remaining_time
 
 class Controller:
@@ -217,8 +219,8 @@ class Controller:
         self.nh = nh
         self.control_rate = control_rate
         self.time_law_type = time_law_type
-        self.kp = np.array([0.1, 0.1, 0.1])
-        self.ko = np.array([0.1, 0.1, 0.1])
+        self.kp = np.array([15, 15, 15])
+        self.ko = np.array([15, 15, 15])
         self.joint_state_sub = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
         self.desired_pose_sub = rospy.Subscriber("/generate_motion_service_node/cartesian_trajectory", CartesianTrajectory, self.desired_pose_callback)
         self.joint_velocity_pub = rospy.Publisher("/joint_group_vel_controller/command", Float64MultiArray, queue_size=1)
@@ -237,6 +239,16 @@ class Controller:
         self.prev_acceleration = np.zeros(6)
         self.dt = rospy.get_param("/dt")
         self.k = 1
+        self.initial_tcp_position = None  # New: Store the initial TCP position
+        self.counter = 1
+        self.control_active = True  # Flag to control when to stop
+        self.last_received_pose = None  # Cache for the last received pose
+        self.pose_received = False      # Flag indicating if a new pose was received
+        # Tolerances for stopping the controller
+        self.position_tolerance = 0.001  # 1 mm
+        self.orientation_tolerance = 0.01  # ~0.57 degrees
+
+        
 
     def joint_state_callback(self, msg):
         joint_names = ["shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint", "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"]
@@ -258,16 +270,25 @@ class Controller:
         # Extract the latest state from the CartesianState array
         latest_state = msg.cartesian_state[-1]
 
+        # Cache the last received pose
+        self.last_received_pose = latest_state
+        self.pose_received = True  # Set the flag indicating a new pose was received
+
         # Get current TCP position from kinematics
         tcp_pose = self.kinematics.compute_fk(self.joint_positions)
         if tcp_pose is None:
             rospy.logerr("Failed to compute TCP position.")
             return
         tcp_position = np.array([tcp_pose.p[0], tcp_pose.p[1], tcp_pose.p[2]])
-        rospy.loginfo(f"Current TCP Position: {tcp_position}")
+        #rospy.loginfo(f"Current TCP Position: {tcp_position}")
+
+        # Initialize the initial TCP position if it is not already set
+        if self.initial_tcp_position is None:
+            self.initial_tcp_position = tcp_position
+            rospy.loginfo(f"Initial TCP Position: {self.initial_tcp_position}")
 
         # Add relative position to the current TCP position
-        current_position = tcp_position + np.array([
+        current_position = self.initial_tcp_position + np.array([
             latest_state.pose.position.x,
             latest_state.pose.position.y,
             latest_state.pose.position.z
@@ -335,9 +356,9 @@ class Controller:
         self.prev_acceleration = current_acceleration
 
 
-        rospy.loginfo(f"Updated TCP State: Position={current_position}, Orientation=\n{current_orientation}")
-        rospy.loginfo(f"Linear Velocity={current_velocity}")
-        rospy.loginfo(f"Linear Acceleration={current_acceleration}")
+        #rospy.loginfo(f"Updated TCP State: Position={current_position}, Orientation=\n{current_orientation}")
+        #rospy.loginfo(f"Linear Velocity={current_velocity}")
+        #rospy.loginfo(f"Linear Acceleration={current_acceleration}")
 
 
 
@@ -375,24 +396,25 @@ class Controller:
         time_law_position = self.create_time_law(start_position, end_position, duration, 
                                                 start_velocity=start_velocity, end_velocity=end_velocity, 
                                                 start_acceleration=start_acceleration, end_acceleration=end_acceleration)
-        self.interpolator_position = Interpolator(lambda t: time_law_position.evaluate(t), duration)
+        self.interpolator_position = Interpolator(lambda t: time_law_position.evaluate(t), duration, self.counter)
 
         # Generate orientation interpolation
         delta_R = np.dot(start_orientation.T, end_orientation)
         axis_angle = R.from_matrix(delta_R).as_rotvec()
 
         if np.linalg.norm(axis_angle) < 1e-1:
-            self.interpolator_orientation = Interpolator(lambda t: start_orientation, duration)
+            self.interpolator_orientation = Interpolator(lambda t: start_orientation, duration, self.counter)
         else:
             time_law_orientation = self.create_time_law(0, np.linalg.norm(axis_angle), duration)
             self.interpolator_orientation = Interpolator(
                 lambda t: R.from_rotvec(time_law_orientation.evaluate(t) * axis_angle / np.linalg.norm(axis_angle)).as_matrix(),
-                duration
+                duration, self.counter
             )
 
         # Discretize trajectory for control loop
-        self.buffered_position, _ = self.interpolator_position.discretize_trajectory(self.control_rate, 0.0)
-        self.buffered_orientation, _ = self.interpolator_orientation.discretize_trajectory(self.control_rate, 0.0)
+        self.buffered_position, _ = self.interpolator_position.discretize_trajectory(self.control_rate, 0.0, self.counter)
+        self.buffered_orientation, _ = self.interpolator_orientation.discretize_trajectory(self.control_rate, 0.0, self.counter)
+        self.counter = self.counter + 1
 
 
 
@@ -403,6 +425,10 @@ class Controller:
         Computes the control action to follow the trajectory accurately and respect the desired motion duration.
         Displays the time taken to compute each control action.
         """
+        if not self.control_active:
+            rospy.loginfo("Controller is stopped. No further actions will be computed.")
+            return
+        
         if not self.buffered_position or not self.buffered_orientation:
             return
 
@@ -430,6 +456,17 @@ class Controller:
         position_error = desired_position - tcp_position
         orientation_error = compute_orientation_error(tcp_orientation, desired_orientation)
 
+        # Check if the final position is reached
+        #rospy.loginfo(f"The position error is: {np.linalg.norm(position_error)}")
+        #rospy.loginfo(f"The orientation error is: {np.linalg.norm(orientation_error)}")
+        rospy.loginfo(f"The desired position is: {desired_position}")
+        rospy.loginfo(f"The current position is: {tcp_position}")
+        if np.linalg.norm(position_error) < self.position_tolerance and np.linalg.norm(orientation_error) < self.orientation_tolerance and not self.buffered_position:
+            rospy.loginfo("Final position and orientation reached. Stopping controller.")
+            self.publish_zero_velocities()
+            self.control_active = False  # Stop further control actions
+            return
+
         # Compute control inputs using proportional gains
         control_input_p = self.kp * position_error
         control_input_o = self.ko * orientation_error
@@ -450,9 +487,18 @@ class Controller:
         computation_time = end_time - start_time
 
         # Display the computation time on the terminal
-        rospy.loginfo(f"Control action computed in {computation_time:.6f} seconds")
-        rospy.loginfo(f"Computed the control action number: {self.k}")
+        #rospy.loginfo(f"Control action computed in {computation_time:.6f} seconds")
+        #rospy.loginfo(f"Computed the control action number: {self.k}")
         self.k = self.k + 1
+
+    def publish_zero_velocities(self):
+        """
+        Publishes zero velocities to stop the robot.
+        """
+        zero_velocities = Float64MultiArray()
+        zero_velocities.data = [0.0] * len(self.joint_positions)
+        self.joint_velocity_pub.publish(zero_velocities)
+        rospy.loginfo("Published zero velocities to stop the robot.")
 
 
 
@@ -476,7 +522,7 @@ if __name__ == "__main__":
         current_time = perf_counter()
         elapsed_time = current_time - last_time
         frequency = 1.0 / elapsed_time if elapsed_time > 0 else 0
-        rospy.loginfo(f"Control Loop Frequency: {frequency:.2f} Hz")
+        #rospy.loginfo(f"Control Loop Frequency: {frequency:.2f} Hz")
         last_time = current_time
 
         controller.compute_control_action()
