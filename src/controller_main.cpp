@@ -28,7 +28,7 @@ int main(int argc, char **argv)
         frequencies.push_back(frequency);
 
         // Periodically log the average frequency (every 10 seconds)
-        if (std::chrono::duration<double>(current_time - start_time).count() >= 10.0)
+        if (std::chrono::duration<double>(current_time - start_time).count() >= 1.0)
         {
             double avg_frequency = std::accumulate(frequencies.begin(), frequencies.end(), 0.0) / frequencies.size();
             ROS_INFO("Average Control Loop Frequency: %.2f Hz", avg_frequency);

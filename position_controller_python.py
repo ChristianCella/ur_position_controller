@@ -219,8 +219,8 @@ class Controller:
         self.nh = nh
         self.control_rate = control_rate
         self.time_law_type = time_law_type
-        self.kp = np.array([15, 15, 15])
-        self.ko = np.array([15, 15, 15])
+        self.kp = np.array([1, 1, 1])
+        self.ko = np.array([1, 1, 1])
         self.joint_state_sub = rospy.Subscriber("/joint_states", JointState, self.joint_state_callback)
         self.desired_pose_sub = rospy.Subscriber("/generate_motion_service_node/cartesian_trajectory", CartesianTrajectory, self.desired_pose_callback)
         self.joint_velocity_pub = rospy.Publisher("/joint_group_vel_controller/command", Float64MultiArray, queue_size=1)
@@ -235,8 +235,8 @@ class Controller:
         self.kinematics.set_chain("base_link", "tool0")
         self.prev_position = None
         self.prev_orientation = None
-        self.prev_velocity = np.zeros(6)
-        self.prev_acceleration = np.zeros(6)
+        self.prev_velocity = np.zeros(3)
+        self.prev_acceleration = np.zeros(3)
         self.dt = rospy.get_param("/dt")
         self.k = 1
         self.initial_tcp_position = None  # New: Store the initial TCP position
@@ -317,19 +317,19 @@ class Controller:
             latest_state.vel.linear.x,
             latest_state.vel.linear.y,
             latest_state.vel.linear.z,
-            latest_state.vel.angular.x,
-            latest_state.vel.angular.y,
-            latest_state.vel.angular.z
+            #latest_state.vel.angular.x,
+            #latest_state.vel.angular.y,
+            #latest_state.vel.angular.z
         ])
 
         # Extract linear and angular accelerations
         current_acceleration = np.array([
             latest_state.acc.linear.x,
             latest_state.acc.linear.y,
-            latest_state.acc.linear.z,
-            latest_state.acc.angular.x,
-            latest_state.acc.angular.y,
-            latest_state.acc.angular.z
+            latest_state.acc.linear.z
+            #latest_state.acc.angular.x,
+            #latest_state.acc.angular.y,
+            #latest_state.acc.angular.z
         ])
 
 
@@ -459,13 +459,15 @@ class Controller:
         # Check if the final position is reached
         #rospy.loginfo(f"The position error is: {np.linalg.norm(position_error)}")
         #rospy.loginfo(f"The orientation error is: {np.linalg.norm(orientation_error)}")
-        rospy.loginfo(f"The desired position is: {desired_position}")
-        rospy.loginfo(f"The current position is: {tcp_position}")
+        #rospy.loginfo(f"The desired position is: {desired_position}")
+        #rospy.loginfo(f"The current position is: {tcp_position}")
+        '''
         if np.linalg.norm(position_error) < self.position_tolerance and np.linalg.norm(orientation_error) < self.orientation_tolerance and not self.buffered_position:
             rospy.loginfo("Final position and orientation reached. Stopping controller.")
             self.publish_zero_velocities()
             self.control_active = False  # Stop further control actions
             return
+        '''
 
         # Compute control inputs using proportional gains
         control_input_p = self.kp * position_error
@@ -512,7 +514,7 @@ from time import perf_counter
 if __name__ == "__main__":
     rospy.init_node("position_controller")
     control_rate = 500.0
-    time_law_type = "linear"  # Options: "linear", "cubic", "quintic"
+    time_law_type = "quintic"  # Options: "linear", "cubic", "quintic"
     controller = Controller(rospy, control_rate, time_law_type)
 
     rate = rospy.Rate(control_rate)

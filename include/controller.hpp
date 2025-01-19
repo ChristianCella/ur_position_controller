@@ -303,6 +303,14 @@ private:
   std::string tf_base_name;
   std::string tf_reference_name;
   std::string tf_tcp_name;
+
+    // TCP position and orientation
+  Eigen::Vector3d tcp_position;
+  Eigen::Matrix3d tcp_orientation;
+
+  // Initial TCP position
+  Eigen::Vector3d initial_tcp_position;  // Add this member variable
+
   Eigen::Vector3d desired_position_prev;
   Eigen::Matrix3d desired_R_prev;
 
@@ -315,8 +323,7 @@ private:
   // Robot state (joints, tcp pose and velocity)
   Vector6d joint_position = Vector6d::Zero();
   // Vector6d joint_velocity; // TODO: remove?
-  Eigen::Vector3d tcp_position;
-  Eigen::Matrix3d tcp_orientation;
+  
 
   // Robot parameters
   double robot_loop_rate; // TODO: parametrise
