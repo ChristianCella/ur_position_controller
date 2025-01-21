@@ -327,9 +327,9 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   // this->pTfListener = new tf2_ros::TransformListener(this->tfBuffer);
 
   // Getting the controller gains from param file
-  this->Kp = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
-  this->Ko = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
-  this->tf_reference_name = "base_link";                                    
+  this->Kp = Eigen::Vector3d(1.5, 1.5, 1.5);  // TODO: Parametrise
+  this->Ko = Eigen::Vector3d(1.5, 1.5, 1.5);  // TODO: Parametrise
+  this->tf_reference_name = "teleop_link";                                    
   this->tf_tcp_name = "tool0";
 
   // Setting time
