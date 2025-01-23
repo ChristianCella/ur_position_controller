@@ -255,14 +255,6 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   ROS_INFO("Checkpoint 1."); 
   this->nh = nh;
 
-  this->tf_reference_name = "base_link";                                    
-  this->tf_tcp_name = "tool0";
-
-  std::string robot_description;
-  this->nh.param("robot_description", robot_description, std::string());
-  this->p_robot_kinematics = std::make_shared<Kinematics>(robot_description);
-  this->p_robot_kinematics->setChain(this->tf_reference_name, this->tf_tcp_name);
-
   // Loop rate
   this->robot_loop_rate = control_loop_rate;  // Robot update loop (Hz) // TODO: parametrise
 
@@ -273,6 +265,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   this->feedback_pub = nh.advertise<geometry_msgs::Pose>("feedback", 1);
   this->position_error_pub = nh.advertise<std_msgs::Float64MultiArray>("position_error", 1);
   ROS_INFO("Checkpoint 2."); 
+
   // Subscriber
   this->desired_pose_sub = nh.subscribe("/generate_motion_service_node/cartesian_path", 1, &Controller::DesiredPoseCallback, this);
   this->joint_states_sub = nh.subscribe("joint_states", 1, &Controller::JointStateCallback, this);
@@ -298,35 +291,11 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   }
   this->JointStateCallback(*sharedPtrJointStates);
 
-  // Add this block to calculate the initial TCP position
-  ROS_INFO("Checkpoint 5."); 
-  Eigen::Affine3d tcp_pose;
-
-  // New checks
-  ROS_INFO_STREAM("Joint positions: " << this->joint_position.transpose());
-  if (!this->p_robot_kinematics)
-  {
-      ROS_ERROR("Kinematics object is not initialized. Aborting.");
-      return;
-  }
-  //
-
-  if (this->p_robot_kinematics->computeFk(this->joint_position, tcp_pose))
-  {
-    this->initial_tcp_position = tcp_pose.translation();
-    ROS_INFO_STREAM("Initial TCP position set to: " << this->initial_tcp_position.transpose());
-  }
-  else
-  {
-    ROS_ERROR("Failed to compute initial TCP position.");
-  }
-  ROS_INFO("Checkpoint 6."); 
-  // Creating the TF listener
-  // this->pTfListener = new tf2_ros::TransformListener(this->tfBuffer);
-  // Getting the controller gains from param file
+ 
   this->Kp = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
   this->Ko = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
-
+  this->tf_reference_name = "base_link";                                    
+  this->tf_tcp_name = "tool0";
   ROS_INFO("Checkpoint 7.");
 
   // Setting time
@@ -337,6 +306,10 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   ROS_INFO("Checkpoint 8."); 
   // --- TRY --- //
 
-  // --- TRY --- //
+  std::string robot_description;
+  this->nh.param("robot_description", robot_description, std::string());
+  this->p_robot_kinematics = std::make_shared<Kinematics>(robot_description);
+  this->p_robot_kinematics->setChain(this->tf_reference_name, this->tf_tcp_name);
+
 }
 
