@@ -292,8 +292,8 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   this->JointStateCallback(*sharedPtrJointStates);
 
  
-  this->Kp = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
-  this->Ko = Eigen::Vector3d(10, 10, 10);  // TODO: Parametrise
+  this->Kp = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
+  this->Ko = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
   this->tf_reference_name = "base_link";                                    
   this->tf_tcp_name = "tool0";
   ROS_INFO("Checkpoint 7.");
