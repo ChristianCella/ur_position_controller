@@ -330,7 +330,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   this->Kp = Eigen::Vector3d(2, 2, 2);  // TODO: Parametrise
   this->Ko = Eigen::Vector3d(2, 2, 2);  // TODO: Parametrise
   this->tf_reference_name = "teleop_link";                                    
-  this->tf_tcp_name = "tool0";
+  this->tf_tcp_name = "dmp_link";
 
   // Setting time
   this->prev_time = std::chrono::high_resolution_clock::now();
