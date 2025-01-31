@@ -295,7 +295,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   this->Kp = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
   this->Ko = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
   this->tf_reference_name = "base_link";                                    
-  this->tf_tcp_name = "tool0";
+  this->tf_tcp_name = "dmp_link";
   ROS_INFO("Checkpoint 7.");
 
   // Setting time
