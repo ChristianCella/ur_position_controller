@@ -268,6 +268,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
 
   // Subscriber
   this->desired_pose_sub = nh.subscribe("/generate_motion_service_node/cartesian_path", 1, &Controller::DesiredPoseCallback, this);
+  //this->desired_pose_sub = nh.subscribe("/desired_pose", 1, &Controller::DesiredPoseCallback, this);
   this->joint_states_sub = nh.subscribe("joint_states", 1, &Controller::JointStateCallback, this);
 
   // Getting first msg for desired pose
@@ -275,6 +276,7 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   while (sharedPtrDesiredPose == NULL)
   {
     sharedPtrDesiredPose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>("/generate_motion_service_node/cartesian_path", ros::Duration(5));
+    //sharedPtrDesiredPose = ros::topic::waitForMessage<geometry_msgs::PoseStamped>("/desired_pose", ros::Duration(5));
     ROS_INFO("No desired_pose messages received");
   }
   ROS_INFO("Checkpoint 3."); 
@@ -295,7 +297,8 @@ Controller::Controller(ros::NodeHandle& nh, double control_loop_rate)
   this->Kp = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
   this->Ko = Eigen::Vector3d(3, 3, 3);  // TODO: Parametrise
   this->tf_reference_name = "base_link";                                    
-  this->tf_tcp_name = "dmp_link";
+  //this->tf_tcp_name = "dmp_link";
+  this->tf_tcp_name = "tool0";
   ROS_INFO("Checkpoint 7.");
 
   // Setting time
